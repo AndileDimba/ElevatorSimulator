@@ -1,0 +1,28 @@
+bin/
+obj/
+.idea/
+/vscode/
+TestResult*/
+*.user
+*suo
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+bin/
+obj/
+TestResult*/
+[Test]Results/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
