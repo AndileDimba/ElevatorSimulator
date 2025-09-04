@@ -12,4 +12,4 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore
       - run: dotnet build --configuration Release --no-restore
-      - run: dotnet test --no-build --verbosity normal
+      - run: dotnet test --configuration Debug --verbosity normal
