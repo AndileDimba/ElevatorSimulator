@@ -10,10 +10,11 @@ public interface IElevator
     int Capacity { get; }
     int PassengerCount { get; }
     IReadOnlyList<int> Targets { get; }
+    ElevatorState State { get; } // To expose State from ElevatorBase via IElevator
 
     bool CanAccept(Request req);
     void Assign(Request req);
-    void Tick(); // advance simulation one tick
+    void Tick();
 }
 
 public interface IDispatchStrategy
