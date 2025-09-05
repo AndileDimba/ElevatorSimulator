@@ -4,18 +4,18 @@ public sealed class Request
 {
     public int Floor { get; }
     public Direction Direction { get; }
-    public int People { get; set; }
+    public int Count { get; }
 
-    public Request(int floor, Direction direction, int people)
+    public Request(int floor, Direction direction, int count)
     {
         if (!Enum.IsDefined(typeof(Direction), direction) || direction == Direction.Idle)
             throw new ArgumentException("Direction must be Up or Down.", nameof(direction));
-        if (people <= 0) throw new ArgumentOutOfRangeException(nameof(people), "People must be > 0.");
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "People must be > 0.");
 
         Floor = floor;
         Direction = direction;
-        People = people;
+        Count = count;
     }
 
-    public override string ToString() => $"Req(F:{Floor}, Dir:{Direction}, P:{People})";
+    public override string ToString() => $"Req(F:{Floor}, Dir:{Direction}, P:{Count})";
 }

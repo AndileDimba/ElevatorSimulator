@@ -9,6 +9,12 @@ public abstract class ElevatorBase : IElevator
     private readonly int _speedTicksPerFloor;
     private readonly int _doorOpenTicks;
     private readonly int _doorCloseTicks;
+    protected readonly List<Passenger> _passengers = new();
+    public IReadOnlyList<Passenger> Passengers => _passengers.AsReadOnly();
+    public int AvailableCapacity => Math.Max(0, Capacity - _passengers.Count);
+
+    // Observer to inform building about arrivals/door events
+    public IElevatorObserver? Observer { get; set; }
 
     private int _moveTickBudget;   // counts down; when zero, move one floor
     private int _doorTickBudget;   // counts down during opening/open/closing
@@ -32,7 +38,7 @@ public abstract class ElevatorBase : IElevator
     public Direction Direction { get; protected set; }
     public bool IsMoving => State == ElevatorState.DoorsClosed && Direction != Direction.Idle && HasTargets;
     public int Capacity { get; }
-    public int PassengerCount { get; protected set; }
+    public int PassengerCount => _passengers.Count;
     public ElevatorState State { get; private set; }
     public IReadOnlyList<int> Targets => GetTargetsSnapshot();
 
@@ -48,17 +54,13 @@ public abstract class ElevatorBase : IElevator
     {
         if (req.Floor == CurrentFloor)
         {
-            // If already here, ensure we stop and open doors next tick
             EnsureStopToServeCurrentFloor();
             return;
         }
 
-        if (req.Floor > CurrentFloor)
-            _upTargets.Add(req.Floor);
-        else
-            _downTargets.Add(req.Floor);
+        if (!AddTarget(req.Floor))
+            return;
 
-        // If idle, choose direction toward nearest target
         if (Direction == Direction.Idle && State == ElevatorState.DoorsClosed)
         {
             Direction = ChooseInitialDirection();
@@ -72,15 +74,19 @@ public abstract class ElevatorBase : IElevator
             case ElevatorState.DoorsClosed:
                 TickWhenDoorsClosed();
                 break;
+
             case ElevatorState.DoorsOpening:
                 if (--_doorTickBudget <= 0)
                 {
                     State = ElevatorState.DoorsOpen;
                     _doorTickBudget = Math.Max(1, _doorOpenTicks); // dwell time open
-                    // Simulate unload/load at arrival floor (Day 3 will handle capacity)
-                    OnArriveAndServeFloor();
+
+                    // Day 3: hooks at arrival/open
+                    OnArrived();   // optional: signal arrival at floor
+                    OnDoorsOpen(); // notify observer and trigger unload/load via Building
                 }
                 break;
+
             case ElevatorState.DoorsOpen:
                 if (--_doorTickBudget <= 0)
                 {
@@ -88,11 +94,15 @@ public abstract class ElevatorBase : IElevator
                     _doorTickBudget = Math.Max(1, _doorCloseTicks);
                 }
                 break;
+
             case ElevatorState.DoorsClosing:
                 if (--_doorTickBudget <= 0)
                 {
                     State = ElevatorState.DoorsClosed;
-                    // After closing, decide next direction
+
+                    // Day 3: notify close; then decide next direction
+                    OnDoorsClosed();
+
                     Direction = ChooseNextDirection();
                 }
                 break;
@@ -105,6 +115,30 @@ public abstract class ElevatorBase : IElevator
         _upTargets.Remove(CurrentFloor);
         _downTargets.Remove(CurrentFloor);
         // Passenger load/unload happens on Day 3
+    }
+
+    public int BoardPassengers(IEnumerable<Passenger> boarding)
+    {
+        int boarded = 0;
+        foreach (var p in boarding)
+        {
+            if (AvailableCapacity <= 0) break;
+            _passengers.Add(p);
+            // Add internal destination as target
+            AddTarget(p.DestinationFloor);
+            boarded++;
+        }
+        // After adding destinations, refine direction if idle
+        if (Direction == Direction.Idle && HasTargets) ChooseInitialDirection();
+        return boarded;
+    }
+
+    public int UnloadAtCurrentFloor()
+    {
+        int before = _passengers.Count;
+        _passengers.RemoveAll(p => p.DestinationFloor == CurrentFloor);
+        int unloaded = before - _passengers.Count;
+        return unloaded;
     }
 
     private void TickWhenDoorsClosed()
@@ -145,11 +179,28 @@ public abstract class ElevatorBase : IElevator
         }
     }
 
-    private void BeginDoorOpen()
+    protected void BeginDoorOpen()
     {
         State = ElevatorState.DoorsOpening;
         _doorTickBudget = Math.Max(1, _doorOpenTicks);
-        // While doors opening/open, elevator is considered not moving
+        _upTargets.Remove(CurrentFloor);
+        _downTargets.Remove(CurrentFloor);
+        Observer?.OnArrivedAtFloor(this, CurrentFloor);
+    }
+
+    private void OnDoorsOpen()
+    {
+        Observer?.OnDoorsOpened(this, CurrentFloor);
+    }
+
+    private void OnArrived()
+    {
+        Observer?.OnArrivedAtFloor(this, CurrentFloor);
+    }
+
+    private void OnDoorsClosed()
+    {
+        Observer?.OnDoorsClosed(this, CurrentFloor);
     }
 
     private void EnsureStopToServeCurrentFloor()
@@ -202,6 +253,29 @@ public abstract class ElevatorBase : IElevator
         list.AddRange(_upTargets);
         list.AddRange(_downTargets);
         return list;
+    }
+
+    public bool AddTarget(int floor)
+    {
+        // Ignore if already at this floor; door cycle will handle service
+        if (floor == CurrentFloor) return false;
+
+        bool added;
+        if (floor > CurrentFloor)
+            added = _upTargets.Add(floor);
+        else
+            added = _downTargets.Add(floor);
+
+        if (!added) return false; // duplicate
+
+        // If idle and doors closed, pick a direction toward the nearest target
+        if (Direction == Direction.Idle && State == ElevatorState.DoorsClosed)
+        {
+            Direction = ChooseInitialDirection();
+            if (_moveTickBudget <= 0) _moveTickBudget = _speedTicksPerFloor;
+        }
+
+        return true;
     }
 
     // A descending sorted set for down targets
