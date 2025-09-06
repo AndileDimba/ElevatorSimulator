@@ -13,6 +13,8 @@ public interface IElevator
     ElevatorState State { get; } // To expose State from ElevatorBase via IElevator
     IReadOnlyList<Passenger> Passengers { get; }
     int AvailableCapacity { get; }
+    bool AddTarget(int floor);
+    void PressButton(int floor);
 
     bool CanAccept(Request req);
     void Assign(Request req);

@@ -16,15 +16,17 @@ public static class Program
 
         var configure = new ConfigureBuildingUseCase();
         var strategy = new NearestAvailableDispatch();
+
         var elevators = new List<IElevator>
         {
+
             new PassengerElevator("E1", startFloor: 0),
             new PassengerElevator("E2", startFloor: 5)
         };
 
         var building = configure.CreateDefault(floors: 12, strategy, elevators);
 
-        Console.WriteLine("TEAMX Elevator Challenge - Console (Day 2)");
+        Console.WriteLine("TEAMX Elevator Challenge - Console (Day 4)");
         Console.WriteLine("Commands: status | call <floor> <up/down> <count> | tick | auto on|off | quit");
 
         while (true)
@@ -64,6 +66,18 @@ public static class Program
                             StopAutoTick();
                         else
                             Console.WriteLine("Usage: auto on|off");
+                        break;
+                    }
+
+                case "press":
+                    {
+                        if (parts.Length < 3) { Console.WriteLine("Usage: press <elevatorId> <floor>"); break; }
+                        var id = parts[1];
+                        if (!int.TryParse(parts[2], out var f)) { Console.WriteLine("Invalid floor"); break; }
+                        var elev = building.Elevators.FirstOrDefault(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
+                        if (elev == null) { Console.WriteLine($"No elevator '{id}'"); break; }
+                        elev.PressButton(f);
+                        Console.WriteLine($"Pressed {f} in {id}");
                         break;
                     }
 
