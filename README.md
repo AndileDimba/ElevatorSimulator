@@ -81,7 +81,7 @@ Day 2 implements a tick‑based elevator movement state machine, initial dispatc
   - LSP via elevator types (`PassengerElevator`, future: `HighSpeed`, `Freight`, `Glass`)
   - DIP via `IElevator` and `IDispatchStrategy` abstractions
 
-#### Current status (Day 3)
+#### Day 3
 - Domain
   - `IElevator` extended:
     - `Passengers` (read-only)
@@ -151,6 +151,75 @@ Day 2 implements a tick‑based elevator movement state machine, initial dispatc
 - Try:
   - `call 0 up 6` → `tick` → `tick` → `status`
   - `call 0 up 20` → `auto on` → `auto off` → `status`
+
+### Day 4: Inside-Car Buttons and Routing Discipline
+
+Implemented core Day 4 features focusing on handling inside-elevator button presses (AddTarget) and a basic routing discipline to serve targets efficiently in the current direction. Passengers' destinations are now added as targets upon boarding, ensuring stops for unloading. Used SortedSet for up/down targets to serve nearest in direction (ascending for up). Tested capacity, unloading, and idle behavior with a scenario involving 10 passengers and multiple presses.
+
+#### Key Changes
+- Added `AddTarget(int floor)` to IElevator and ElevatorBase for button presses, classifying as up/down based on current floor.
+- In Building's `OnDoorsOpened`, added loop to call `elevator.AddTarget(passenger.DestinationFloor)` for each boarded passenger.
+- Updated `UnloadAtCurrentFloor` to remove passengers where `DestinationFloor == CurrentFloor` from the underlying `_passengers` list.
+- Switched targets to SortedSet (ascending for up, descending for down) for optimized serving order without skips.
+- Passenger creation in `SubmitCall` fixed destinations to 3 for test consistency (can be randomized later).
+- Resolved constructor overloads in PassengerElevator and interface signatures for compilation/tests.
+
+#### Test Run (Successful Scenario)
+Ran the following commands to verify boarding, targeted movement, unloading at destinations, and idling:
+
+> status
+- Floors: 12
+  - E1 | F:0 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
+  - E2 | F:5 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
+
+> call 0 up 10
+- Registered call: floor 0, Up, 10 pax.
+
+> press E1 6
+- Pressed 6 in E1
+
+> press E1 8
+- Pressed 8 in E1
+
+> press E1 4
+- Pressed 4 in E1
+
+> auto on
+Auto-tick: ON (300ms)
+
+> Arrived: E1 at F:0
+- Stop F:0 | Unloaded:0 Boarded:10 RemainingUp:0 RemainingDown:0
+- (auto) tick x5
+- (auto) tick x10
+- (auto) tick x15
+- (auto) tick x20
+- Arrived: E1 at F:3
+- Stop F:3 | Unloaded:10 Boarded:0 RemainingUp:0 RemainingDown:0
+- (auto) tick x25
+- (auto) tick x30
+- Arrived: E1 at F:4
+- Stop F:4 | Unloaded:0 Boarded:0 RemainingUp:0 RemainingDown:0
+- (auto) tick x35
+- (auto) tick x40
+- (auto) tick x45
+- Arrived: E1 at F:6
+- Stop F:6 | Unloaded:0 Boarded:0 RemainingUp:0 RemainingDown:0
+- (auto) tick x50
+- (auto) tick x55
+- (auto) tick x60
+- Arrived: E1 at F:8
+- (auto) tick x65
+- Stop F:8 | Unloaded:0 Boarded:0 RemainingUp:0 RemainingDown:0
+- (auto) tick x70
+- (auto) tick x75
+- (auto) x80
+> auto  off
+- Auto-tick: OFF
+
+> status
+- Floors: 12
+  - E1 | F:8 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
+  - E2 | F:5 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
 
 #### Build/Run requirements
 - Windows 11 (dev environment)
