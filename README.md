@@ -221,6 +221,51 @@ Auto-tick: ON (300ms)
   - E1 | F:8 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
   - E2 | F:5 | Dir:Idle | State:DoorsClosed | Moving:False | Pax:0/10 | Targets:[]
 
+
+### Day 5 — Elevator types, dispatch polish, capacity and queue visibility
+
+#### What’s new
+- Added HighSpeedElevator and FreightElevator (inherits PassengerElevator; currently a tagged type).
+- Dispatch uses ChooseElevator(Building, Request) with partial assignment to avoid all‑or‑nothing behavior.
+- Re‑enabled TryDispatchQueues on each tick so waiting calls are actively assigned.
+- Capacity‑aware boarding on door open; overflow remains queued.
+- Console: added status waiting to show per‑floor waiting counts.
+- Tests: expose SpeedTicksPerFloor and verify dispatch preference for the high‑speed car.
+
+#### Commands
+- status
+- status waiting
+- call <floor> <up|down> <count>
+- press <elevatorId> <floor>
+- tick
+- auto on|off
+- quit
+
+#### Manual verification
+- Dispatch preference
+  1) status
+  2) call 10 down 1
+  3) auto on → expect E2 to be dispatched and arrive at F:10
+  4) auto off
+
+- Inside‑car buttons
+  1) call 0 up 10 → auto on until boarding/unload → auto off
+  2) press E1 4; press E1 6; press E1 8
+  3) auto on → expect stops in order 4 → 6 → 8 → auto off
+
+- Capacity and overflow
+  1) call 0 up 12
+  2) auto on → expect “Stop F:0 | … Boarded:10 RemainingUp:2 …”
+  3) auto off
+  4) status waiting → should show F:0 | Up:2 (if you don’t stop auto immediately, another idle car may pick up the remaining 2 right away)
+
+- Validation
+  - call 3 sideways 2 → “Direction must be 'up' or 'down'.”
+
+#### Notes
+- FreightElevator currently behaves like PassengerElevator (type tag only); can be specialized later.
+- status output is simplified for portability; use status waiting to inspect floor queues.
+
 #### Build/Run requirements
 - Windows 11 (dev environment)
 - .NET 8 SDK
