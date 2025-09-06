@@ -21,13 +21,18 @@ public static class Program
         {
 
             new PassengerElevator("E1", startFloor: 0),
-            new PassengerElevator("E2", startFloor: 5)
+            new PassengerElevator("E2", startFloor: 5),
+            new HighSpeedElevator("E2", startFloor: 5),
+            new FreightElevator("F1"),
         };
 
         var building = configure.CreateDefault(floors: 12, strategy, elevators);
+        building.AddElevator(new PassengerElevator("E1"));
+        building.AddElevator(new HighSpeedElevator("E2", startFloor: 5));
+        building.AddElevator(new FreightElevator("F1"));
 
-        Console.WriteLine("TEAMX Elevator Challenge - Console (Day 4)");
-        Console.WriteLine("Commands: status | call <floor> <up/down> <count> | tick | auto on|off | quit");
+        Console.WriteLine("TEAMX Elevator Challenge - Console (Day 5)");
+        Console.WriteLine("Commands: status | status waiting | call <floor> <up/down> <count> | press <elevatorId> <floor> | tick | auto on|off | quit");
 
         while (true)
         {
@@ -48,8 +53,31 @@ public static class Program
                     return;
 
                 case "status":
-                    RenderStatus(building);
-                    break;
+                    {
+                        if (parts.Length > 1 && parts[1].Equals("waiting", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine("Waiting (non-zero only):");
+                            for (int f = 0; f < building.Floors; f++)
+                            {
+                                var up = building.GetWaitingCount(f, Direction.Up);
+                                var down = building.GetWaitingCount(f, Direction.Down);
+                                if (up > 0 || down > 0)
+                                    Console.WriteLine($"F:{f} | Up:{up} Down:{down}");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Floors: {building.Floors}");
+                            foreach (var e in building.Elevators
+                                                      .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                                                      .Select(g => g.First())
+                                                      .OrderBy(x => x.Id))
+                            {
+                                Console.WriteLine($"{e.Id} | F:{e.CurrentFloor} | Dir:{e.Direction} | State:{e.State} | Moving:{e.IsMoving} | Pax:{e.PassengerCount}/{e.Capacity}");
+                            }
+                        }
+                        break;
+                    }
 
                 case "tick":
                     building.TickAll();
@@ -82,28 +110,40 @@ public static class Program
                     }
 
                 case "call":
-                    if (parts.Length >= 4 &&
-                        int.TryParse(parts[1], out int floor) &&
-                        TryParseDirection(parts[2], out var dir) &&
-                        int.TryParse(parts[3], out int count) &&
-                        count > 0)
                     {
                         try
                         {
+                            // call <floor:int> <up|down> <count:int>
+                            if (parts.Length < 4)
+                            {
+                                Console.WriteLine("Usage: call <floor:int> <up|down> <count:int>");
+                                break;
+                            }
+
+                            var floor = int.Parse(parts[1]);
+
+                            if (!TryParseDirection(parts[2], out var dir))
+                            {
+                                Console.WriteLine("Direction must be 'up' or 'down'.");
+                                break;
+                            }
+
+                            var count = int.Parse(parts[3]);
+
                             var req = new Request(floor, dir, count);
                             building.SubmitCall(req);
                             Console.WriteLine($"Registered call: floor {floor}, {dir}, {count} pax.");
+                        }
+                        catch (FormatException)
+                        {
+                            Console.WriteLine("Usage: call <floor:int> <up|down> <count:int>");
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine($"Error: {ex.Message}");
                         }
+                        break;
                     }
-                    else
-                    {
-                        Console.WriteLine("Usage: call <floor:int> <up|down> <count:int>");
-                    }
-                    break;
 
                 default:
                     Console.WriteLine("Unknown command. Try: status | call <floor> <up/down> <count> | tick | auto on|off | quit");
@@ -120,22 +160,6 @@ public static class Program
             case "down": dir = Direction.Down; return true;
             default: dir = Direction.Idle; return false;
         }
-    }
-
-    private static void RenderStatus(Building b)
-    {
-        Console.WriteLine($"Floors: {b.Floors}");
-        foreach (var e in b.Elevators)
-        {
-            Console.WriteLine($"{e.Id} | F:{e.CurrentFloor} | Dir:{e.Direction} | State:{e.State} | Moving:{e.IsMoving} | Pax:{e.PassengerCount}/{e.Capacity} | Targets:[{string.Join(",", e.Targets)}]");
-        }
-    }
-
-    private static string GetState(IElevator e)
-    {
-        // IElevator doesn't expose State; cast if base type (safe in our setup)
-        return e is ElevatorBase eb ? ebState(eb) : (e.IsMoving ? "Moving" : "Idle");
-        static string ebState(ElevatorBase eb) => eb.GetType().GetProperty("State", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public) is { } ? "OK" : "N/A";
     }
 
     private static void StartAutoTick(Building building, int count = -1)
