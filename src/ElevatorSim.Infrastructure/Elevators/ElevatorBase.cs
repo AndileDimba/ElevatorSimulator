@@ -4,8 +4,8 @@ namespace ElevatorSim.Infrastructure.Elevators;
 
 public abstract class ElevatorBase : IElevator
 {
-    private readonly SortedSet<int> _upTargets = new();      // ascending
-    private readonly SortedSet<int> _downTargets = new DescendingIntSet(); // descending
+    protected readonly SortedSet<int> _upTargets = new SortedSet<int>();
+    protected readonly SortedSet<int> _downTargets = new SortedSet<int>(Comparer<int>.Create((a, b) => b.CompareTo(a)));
     private readonly int _speedTicksPerFloor;
     private readonly int _doorOpenTicks;
     private readonly int _doorCloseTicks;
@@ -18,6 +18,7 @@ public abstract class ElevatorBase : IElevator
 
     private int _moveTickBudget;   // counts down; when zero, move one floor
     private int _doorTickBudget;   // counts down during opening/open/closing
+    protected int TopFloorExclusive { get; private set; } = 12; // default; override from derived
 
     protected ElevatorBase(string id, int startFloor, int capacity, int speedTicksPerFloor, int doorOpenTicks, int doorCloseTicks)
     {
@@ -76,10 +77,7 @@ public abstract class ElevatorBase : IElevator
                 break;
 
             case ElevatorState.DoorsOpening:
-                // Debug to verify countdown
-                // System.Console.WriteLine($"[DBG] DoorsOpening budget(before):{_doorTickBudget}");
-                _doorTickBudget--;
-                if (_doorTickBudget <= 0)
+                if (--_doorTickBudget <= 0)
                 {
                     State = ElevatorState.DoorsOpen;
                     _doorTickBudget = Math.Max(1, _doorOpenTicks); // dwell time while doors are open
@@ -109,13 +107,13 @@ public abstract class ElevatorBase : IElevator
         }
     }
 
-    protected virtual void OnArriveAndServeFloor()
-    {
-        // Remove current floor from targets if present
-        _upTargets.Remove(CurrentFloor);
-        _downTargets.Remove(CurrentFloor);
-        // Passenger load/unload happens on Day 3
-    }
+    //protected virtual void OnArriveAndServeFloor()
+    //{
+    //    // Remove current floor from targets if present
+    //    _upTargets.Remove(CurrentFloor);
+    //    _downTargets.Remove(CurrentFloor);
+    //    // Passenger load/unload happens on Day 3
+    //}
 
     public int BoardPassengers(IEnumerable<Passenger> boarding)
     {
@@ -135,60 +133,81 @@ public abstract class ElevatorBase : IElevator
 
     public int UnloadAtCurrentFloor()
     {
-        int before = _passengers.Count;
-        _passengers.RemoveAll(p => p.DestinationFloor == CurrentFloor);
-        int unloaded = before - _passengers.Count;
-        return unloaded;
+        // Find passengers to unload (where DestinationFloor matches CurrentFloor)
+        var toUnload = _passengers.Where(p => p.DestinationFloor == CurrentFloor).ToList();
+
+        // Remove them from the underlying list
+        foreach (var passenger in toUnload)
+        {
+            _passengers.Remove(passenger);
+        }
+
+        return toUnload.Count;
     }
 
     private void TickWhenDoorsClosed()
     {
-        if (!HasTargets)
+        if (Direction == Direction.Idle)
         {
-            Direction = Direction.Idle;
-            return;
+            Direction = ChooseInitialDirection();
+            if (Direction == Direction.Idle) return;
+
+            if (_moveTickBudget <= 0) _moveTickBudget = _speedTicksPerFloor;
         }
 
-        // If at a target floor, open doors
-        if (IsTarget(CurrentFloor))
-        {
-            BeginDoorOpen();
-            return;
-        }
-
-        // Otherwise move toward current direction’s nearest target
         if (--_moveTickBudget <= 0)
         {
             _moveTickBudget = _speedTicksPerFloor;
-            if (Direction == Direction.Up) CurrentFloor++;
-            else if (Direction == Direction.Down) CurrentFloor--;
-        }
 
-        // If we just reached a target, open doors next opportunity
-        if (IsTarget(CurrentFloor))
-        {
-            BeginDoorOpen();
-        }
-        else
-        {
-            // If moving in a direction with no remaining targets ahead, flip if other side has targets
-            if (Direction == Direction.Up && !_upTargets.Any(t => t > CurrentFloor) && _downTargets.Count > 0)
-                Direction = Direction.Down;
-            else if (Direction == Direction.Down && !_downTargets.Any(t => t < CurrentFloor) && _upTargets.Count > 0)
-                Direction = Direction.Up;
+            if (Direction == Direction.Up)
+            {
+                if (CurrentFloor >= TopFloorExclusive - 1)
+                {
+                    _upTargets.Clear();
+                    Direction = ChooseNextDirection();
+                    return;
+                }
+
+                CurrentFloor++;
+
+                if (_upTargets.Count > 0 && CurrentFloor == _upTargets.Min)
+                {
+                    _upTargets.Remove(_upTargets.Min);
+                    BeginDoorOpen();
+                    return;
+                }
+            }
+            else if (Direction == Direction.Down)
+            {
+                if (CurrentFloor <= 0)
+                {
+                    _downTargets.Clear();
+                    Direction = ChooseNextDirection();
+                    return;
+                }
+
+                CurrentFloor--;
+
+                if (_downTargets.Count > 0 && CurrentFloor == _downTargets.Max)
+                {
+                    _downTargets.Remove(_downTargets.Max);
+                    BeginDoorOpen();
+                    return;
+                }
+            }
         }
     }
 
     protected void BeginDoorOpen()
     {
-        if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen) return; // guard re-entry
+        // Prevent re-entry and budget resets if already opening/open.
+        if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen)
+            return;
 
         State = ElevatorState.DoorsOpening;
         _doorTickBudget = Math.Max(1, _doorOpenTicks);
 
-        _upTargets.Remove(CurrentFloor);
-        _downTargets.Remove(CurrentFloor);
-
+        // Fire arrival once per stop
         Observer?.OnArrivedAtFloor(this, CurrentFloor);
     }
 
@@ -209,44 +228,26 @@ public abstract class ElevatorBase : IElevator
 
     private void EnsureStopToServeCurrentFloor()
     {
-        if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen)
-            return;
-
-        State = ElevatorState.DoorsOpening;
-        _doorTickBudget = Math.Max(1, _doorOpenTicks);
-        _moveTickBudget = _speedTicksPerFloor;
-
-        _upTargets.Remove(CurrentFloor);
-        _downTargets.Remove(CurrentFloor);
-
-        Observer?.OnArrivedAtFloor(this, CurrentFloor);
+        // Delegate to the canonical door-open transition.
+        BeginDoorOpen();
     }
 
     private Direction ChooseInitialDirection()
     {
-        if (_upTargets.Count == 0 && _downTargets.Count == 0) return Direction.Idle;
-        if (_upTargets.Count == 0) return Direction.Down;
-        if (_downTargets.Count == 0) return Direction.Up;
-
-        // Choose nearest
-        int nearestUp = _upTargets.Min;
-        int nearestDown = _downTargets.Max; // due to descending set
-        int dUp = Math.Abs(nearestUp - CurrentFloor);
-        int dDown = Math.Abs(CurrentFloor - nearestDown);
-        return dUp <= dDown ? Direction.Up : Direction.Down;
+        if (_upTargets.Count > 0) return Direction.Up;
+        if (_downTargets.Count > 0) return Direction.Down;
+        return Direction.Idle;
     }
 
     private Direction ChooseNextDirection()
     {
-        // If still targets at current floor after serving, decide next direction by availability
-        if (_upTargets.Count == 0 && _downTargets.Count == 0) return Direction.Idle;
+        if (Direction == Direction.Up && _upTargets.Count > 0) return Direction.Up;
+        if (Direction == Direction.Down && _downTargets.Count > 0) return Direction.Down;
 
-        // Prefer continuing in same direction if targets remain that way
-        if (Direction == Direction.Up && _upTargets.Any(t => t >= CurrentFloor)) return Direction.Up;
-        if (Direction == Direction.Down && _downTargets.Any(t => t <= CurrentFloor)) return Direction.Down;
+        if (_upTargets.Count > 0) return Direction.Up;
+        if (_downTargets.Count > 0) return Direction.Down;
 
-        // Otherwise choose side with nearest target
-        return ChooseInitialDirection();
+        return Direction.Idle;
     }
 
     private bool IsTarget(int floor) => _upTargets.Contains(floor) || _downTargets.Contains(floor);
@@ -261,18 +262,24 @@ public abstract class ElevatorBase : IElevator
 
     public bool AddTarget(int floor)
     {
-        // Ignore if already at this floor; door cycle will handle service
-        if (floor == CurrentFloor) return false;
+        if (floor < 0 || floor >= TopFloorExclusive) return false;
 
-        bool added;
-        if (floor > CurrentFloor)
-            added = _upTargets.Add(floor);
-        else
-            added = _downTargets.Add(floor);
+        if (floor == CurrentFloor)
+        {
+            if (State == ElevatorState.DoorsClosed)
+            {
+                BeginDoorOpen();
+                return true;
+            }
+            return false;
+        }
 
-        if (!added) return false; // duplicate
+        if (_upTargets.Contains(floor) || _downTargets.Contains(floor))
+            return false;
 
-        // If idle and doors closed, pick a direction toward the nearest target
+        bool added = (floor > CurrentFloor) ? _upTargets.Add(floor) : _downTargets.Add(floor);
+        if (!added) return false;
+
         if (Direction == Direction.Idle && State == ElevatorState.DoorsClosed)
         {
             Direction = ChooseInitialDirection();
@@ -282,9 +289,20 @@ public abstract class ElevatorBase : IElevator
         return true;
     }
 
-    // A descending sorted set for down targets
-    private sealed class DescendingIntSet : SortedSet<int>
+    public void PressButton(int floor)
     {
-        public DescendingIntSet() : base(Comparer<int>.Create((a, b) => b.CompareTo(a))) { }
+        if (floor < 0 || floor >= TopFloorExclusive) return;
+
+        if (floor == CurrentFloor &&
+            (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen))
+            return; // already handling this floor
+
+        AddTarget(floor);
+    }
+
+    // Allow derived classes to set building floors bound in a controlled way
+    protected void SetTopFloorExclusive(int floors)
+    {
+        TopFloorExclusive = Math.Max(1, floors);
     }
 }
