@@ -76,14 +76,14 @@ public abstract class ElevatorBase : IElevator
                 break;
 
             case ElevatorState.DoorsOpening:
-                if (--_doorTickBudget <= 0)
+                // Debug to verify countdown
+                // System.Console.WriteLine($"[DBG] DoorsOpening budget(before):{_doorTickBudget}");
+                _doorTickBudget--;
+                if (_doorTickBudget <= 0)
                 {
                     State = ElevatorState.DoorsOpen;
-                    _doorTickBudget = Math.Max(1, _doorOpenTicks); // dwell time open
-
-                    // Day 3: hooks at arrival/open
-                    OnArrived();   // optional: signal arrival at floor
-                    OnDoorsOpen(); // notify observer and trigger unload/load via Building
+                    _doorTickBudget = Math.Max(1, _doorOpenTicks); // dwell time while doors are open
+                    OnDoorsOpen(); // Building will unload/load here
                 }
                 break;
 
@@ -181,10 +181,14 @@ public abstract class ElevatorBase : IElevator
 
     protected void BeginDoorOpen()
     {
+        if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen) return; // guard re-entry
+
         State = ElevatorState.DoorsOpening;
         _doorTickBudget = Math.Max(1, _doorOpenTicks);
+
         _upTargets.Remove(CurrentFloor);
         _downTargets.Remove(CurrentFloor);
+
         Observer?.OnArrivedAtFloor(this, CurrentFloor);
     }
 
@@ -205,17 +209,17 @@ public abstract class ElevatorBase : IElevator
 
     private void EnsureStopToServeCurrentFloor()
     {
-        // If we’re already at the requested floor, begin the door cycle so the floor is served.
-        // Reset movement budget so we don’t accidentally move before serving.
+        if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen)
+            return;
+
         State = ElevatorState.DoorsOpening;
         _doorTickBudget = Math.Max(1, _doorOpenTicks);
         _moveTickBudget = _speedTicksPerFloor;
 
-        // Remove current floor from targets in case it’s present.
         _upTargets.Remove(CurrentFloor);
         _downTargets.Remove(CurrentFloor);
 
-        // Direction can remain as-is; once doors close, ChooseNextDirection() will decide.
+        Observer?.OnArrivedAtFloor(this, CurrentFloor);
     }
 
     private Direction ChooseInitialDirection()
