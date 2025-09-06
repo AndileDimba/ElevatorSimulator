@@ -2,7 +2,7 @@
 
 namespace ElevatorSim.Infrastructure.Elevators;
 
-public sealed class PassengerElevator : ElevatorBase
+public class PassengerElevator : ElevatorBase
 {
     // 1-arg overload for tests: (id) - defaults startFloor to 0
     public PassengerElevator(string id)

@@ -19,6 +19,7 @@ public abstract class ElevatorBase : IElevator
     private int _moveTickBudget;   // counts down; when zero, move one floor
     private int _doorTickBudget;   // counts down during opening/open/closing
     protected int TopFloorExclusive { get; private set; } = 12; // default; override from derived
+    public int SpeedTicksPerFloor { get; protected set; } = 5;
 
     protected ElevatorBase(string id, int startFloor, int capacity, int speedTicksPerFloor, int doorOpenTicks, int doorCloseTicks)
     {
@@ -216,10 +217,6 @@ public abstract class ElevatorBase : IElevator
         Observer?.OnDoorsOpened(this, CurrentFloor);
     }
 
-    private void OnArrived()
-    {
-        Observer?.OnArrivedAtFloor(this, CurrentFloor);
-    }
 
     private void OnDoorsClosed()
     {
@@ -249,8 +246,6 @@ public abstract class ElevatorBase : IElevator
 
         return Direction.Idle;
     }
-
-    private bool IsTarget(int floor) => _upTargets.Contains(floor) || _downTargets.Contains(floor);
 
     private IReadOnlyList<int> GetTargetsSnapshot()
     {
