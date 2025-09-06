@@ -51,19 +51,21 @@ public static class Program
 
                 case "tick":
                     building.TickAll();
+                    foreach (var ev in building.DrainEvents()) Console.WriteLine(ev);
                     Console.WriteLine("Tick.");
                     break;
 
                 case "auto":
-                    if (parts.Length >= 2)
                     {
-                        var arg = parts[1].ToLowerInvariant();
-                        if (arg == "on") StartAutoTick(building);
-                        else if (arg == "off") StopAutoTick();
-                        else Console.WriteLine("Usage: auto on|off");
+                        var arg = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "";
+                        if (arg == "on")
+                            StartAutoTick(building);
+                        else if (arg == "off")
+                            StopAutoTick();
+                        else
+                            Console.WriteLine("Usage: auto on|off");
+                        break;
                     }
-                    else Console.WriteLine("Usage: auto on|off");
-                    break;
 
                 case "call":
                     if (parts.Length >= 4 &&
@@ -122,21 +124,38 @@ public static class Program
         static string ebState(ElevatorBase eb) => eb.GetType().GetProperty("State", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public) is { } ? "OK" : "N/A";
     }
 
-    private static void StartAutoTick(Building building)
+    private static void StartAutoTick(Building building, int count = -1)
     {
         if (_autoTick) return;
         _autoTick = true;
         _autoTickCts = new CancellationTokenSource();
         var ct = _autoTickCts.Token;
+
         _ = Task.Run(async () =>
         {
+            var tickCount = 0;
             while (!ct.IsCancellationRequested)
             {
                 building.TickAll();
+
+                // Print Day 3 events
+                var events = building.DrainEvents();
+                foreach (var ev in events) Console.WriteLine(ev);
+
+                tickCount++;
+                if (tickCount % 5 == 0) Console.WriteLine($"(auto) tick x{tickCount}");
+
+                if (count > 0 && tickCount >= count)
+                {
+                    StopAutoTick();
+                    break;
+                }
+
                 await Task.Delay(300, ct);
             }
         }, ct);
-        Console.WriteLine("Auto-tick: ON (300ms)");
+
+        Console.WriteLine(count > 0 ? $"Auto-tick: ON (300ms) for {count} ticks" : "Auto-tick: ON (300ms)");
     }
 
     private static void StopAutoTick()

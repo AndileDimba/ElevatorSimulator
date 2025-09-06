@@ -35,7 +35,7 @@ Day 2 implements a tick‑based elevator movement state machine, initial dispatc
 - `quit` / `exit`  
   Exit the console app.
 
-#### Current status (Day 2)
+#### Day 2
 - Domain
   - Enums: `Direction`, `ElevatorState`, `ElevatorType`
   - Interfaces: `IElevator` (now includes `State`), `IDispatchStrategy`
@@ -81,11 +81,76 @@ Day 2 implements a tick‑based elevator movement state machine, initial dispatc
   - LSP via elevator types (`PassengerElevator`, future: `HighSpeed`, `Freight`, `Glass`)
   - DIP via `IElevator` and `IDispatchStrategy` abstractions
 
-#### Next (Day 3)
-- Capacity handling and passenger load/unload on door open
-- Floor queues and re‑dispatch when elevator is full
-- Improved dispatch tie‑breakers and starvation prevention
-- Richer console feedback (loaded/left‑behind counts, ETAs)
+#### Current status (Day 3)
+- Domain
+  - `IElevator` extended:
+    - `Passengers` (read-only)
+    - `AvailableCapacity`
+    - `UnloadAtCurrentFloor()`, `BoardPassengers(IEnumerable<Passenger>)`
+    - `IElevatorObserver? Observer`
+  - `Building` implements `IElevatorObserver`
+    - Per-floor `FloorQueue` (Up/Down)
+    - On doors open: unload first, then board up to capacity
+    - After ticks: re-dispatch floors that still have waiting passengers
+  - `Request` supports passenger count (`People` with `Count` alias)
+- Infrastructure
+  - `ElevatorBase`
+    - Internal passenger list and capacity calculation
+    - `AddTarget(int)` with direction-aware routing
+    - Stabilized door cycle (correct tick budgeting; no re-entry loop)
+    - Fires observer events: Arrived, DoorsOpened, DoorsClosed
+  - `PassengerElevator` inherits new behavior
+- Console
+  - Same commands as Day 2: `status`, `call <floor> <up|down> <count>`, `tick`, `auto on|off`, `quit`
+  - Functional flow: submit calls; on doors open, building unloads/loads; overflow remains queued
+- Tests
+  - Initial smoke tests for boarding/unloading and capacity (to expand later)
+- CI
+  - No changes required from Day 2
+
+#### Example sessions
+- Basic boarding
+  - Input
+    - `call 0 up 6`
+    - `tick`
+    - `tick`
+    - `status`
+  - Output (example)
+    - `Arrived: E1 at F:0`
+    - `Stop F:0 | Unloaded:0 Boarded:6 RemainingUp:0 RemainingDown:0`
+    - `E1 | F:0 | Dir:Idle | State:DoorsOpen | Pax:6/10 | Targets:[3]`
+
+- Capacity edge case
+  - Input
+    - `call 0 up 20`
+    - `auto on`
+    - …let it run…
+    - `auto off`
+    - `status`
+  - Output (example excerpts)
+    - `Arrived: E1 at F:0`
+    - `Stop F:0 | Unloaded:0 Boarded:10 RemainingUp:10 RemainingDown:0`
+    - `Arrived: E1 at F:3`
+    - `Stop F:3 | Unloaded:10 Boarded:0 RemainingUp:10 RemainingDown:0`
+    - `E1 | F:3 | Dir:Idle | State:DoorsClosed | Pax:0/10 | Targets:[]`
+
+#### Architecture notes (Day 3 deltas)
+- Observer pattern: elevators raise events; `Building` performs unload/load and manages queues
+- Clean Architecture preserved: Domain remains independent of Infrastructure (interaction via `IElevator`)
+- Floor queues enable realistic batching and overflow handling; remaining passengers are re-dispatched
+
+#### Known limitations / next steps
+- Destination modeling: current heuristic; consider randomized or user-entered destinations
+- Dispatch: explore load-aware scoring and starvation prevention
+- Console: optionally show per-floor waiting counts in `status`
+- Tests: broaden for multi-elevator routing and queue re-dispatch timing
+
+#### Build/Run
+- `dotnet build`
+- `dotnet run --project src/ElevatorSim.Console`
+- Try:
+  - `call 0 up 6` → `tick` → `tick` → `status`
+  - `call 0 up 20` → `auto on` → `auto off` → `status`
 
 #### Build/Run requirements
 - Windows 11 (dev environment)
