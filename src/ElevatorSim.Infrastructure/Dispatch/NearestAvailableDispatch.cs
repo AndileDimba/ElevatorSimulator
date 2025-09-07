@@ -17,6 +17,7 @@ public sealed class NearestAvailableDispatch : IDispatchStrategy
 
         foreach (var e in building.Elevators)
         {
+            if (building.IsOutOfService(e.Id)) continue;
             var distance = Math.Abs(e.CurrentFloor - request.Floor);
             var loadPenalty = e.PassengerCount; // simple load penalty
             var directionPenalty = 0;

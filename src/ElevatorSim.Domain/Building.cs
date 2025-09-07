@@ -10,10 +10,13 @@ public sealed class Building : IElevatorObserver
     private readonly Dictionary<int, FloorQueue> _passengerQueues = new();
     private readonly List<string> _events = new();
     private readonly HashSet<int> _floorsBoardedThisTick = new();
+    private readonly HashSet<string> _outOfService = new(StringComparer.OrdinalIgnoreCase);
 
     public int Floors { get; }
     public IReadOnlyList<IElevator> Elevators => _elevators.AsReadOnly();
     public IDispatchStrategy DispatchStrategy { get; }
+    public bool IsOutOfService(string elevatorId) => _outOfService.Contains(elevatorId);
+    public IReadOnlyCollection<string> OutOfServiceElevators => _outOfService.ToArray();
 
     public Building(int floors, IDispatchStrategy dispatchStrategy)
     {
@@ -237,5 +240,24 @@ public sealed class Building : IElevatorObserver
             _passengerQueues[floor] = fq;
         }
         return fq;
+    }
+
+    public bool SetOutOfService(string elevatorId, bool value)
+    {
+        var exists = _elevators.Any(e => e.Id.Equals(elevatorId, StringComparison.OrdinalIgnoreCase));
+        if (!exists) return false;
+        if (value) _outOfService.Add(elevatorId);
+        else _outOfService.Remove(elevatorId);
+
+        _events.Add($"OOS {(value ? "ON" : "OFF")}: {elevatorId}");
+        return true;
+    }
+
+    public IEnumerable<string> GetRecentEvents(int take = 20)
+    {
+        if (take <= 0) yield break;
+        int start = Math.Max(0, _events.Count - take);
+        for (int i = start; i < _events.Count; i++)
+            yield return _events[i];
     }
 }

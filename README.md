@@ -266,6 +266,31 @@ Auto-tick: ON (300ms)
 - FreightElevator currently behaves like PassengerElevator (type tag only); can be specialized later.
 - status output is simplified for portability; use status waiting to inspect floor queues.
 
+### Day 6 — Operations polish and console UX
+
+#### What’s new
+- Out-of-service toggle per elevator; dispatch skips OOS units.
+- tick N helper to step the simulation quickly.
+- events [N] command to view recent events.
+- help command summarizing available commands.
+
+#### New/updated commands
+- help
+- oos <elevatorId> <on|off>
+- tick [N]
+- events [N]
+- status
+- status waiting
+- call <floor> <up|down> <count>
+- press <elevatorId> <floor>
+- auto on|off
+- quit
+
+#### Verify quickly
+- oos E2 on → call 10 down 1 → E2 is skipped by dispatch.
+- tick 25 → advances 25 ticks and prints a summary.
+- events 10 → shows arrivals, stops, and OOS toggles.
+
 #### Build/Run requirements
 - Windows 11 (dev environment)
 - .NET 8 SDK
