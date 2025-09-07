@@ -79,11 +79,33 @@ public static class Program
                         break;
                     }
 
+                case "help":
+                    {
+                        Console.WriteLine("Commands:");
+                        Console.WriteLine("  status");
+                        Console.WriteLine("  status waiting");
+                        Console.WriteLine("  call <floor> <up/down> <count>");
+                        Console.WriteLine("  press <elevatorId> <floor>");
+                        Console.WriteLine("  tick [N]");
+                        Console.WriteLine("  auto on|off");
+                        Console.WriteLine("  oos <elevatorId> <on|off>");
+                        Console.WriteLine("  events [N]");
+                        Console.WriteLine("  quit");
+                        break;
+                    }
+
                 case "tick":
-                    building.TickAll();
-                    foreach (var ev in building.DrainEvents()) Console.WriteLine(ev);
-                    Console.WriteLine("Tick.");
-                    break;
+                    {
+                        int repeat = 1;
+                        if (parts.Length >= 2 && int.TryParse(parts[1], out var n) && n > 0)
+                            repeat = n;
+
+                        for (int i = 0; i < repeat; i++)
+                            building.TickAll();
+
+                        Console.WriteLine($"(manual) tick x{repeat}");
+                        break;
+                    }
 
                 case "auto":
                     {
@@ -142,6 +164,33 @@ public static class Program
                         {
                             Console.WriteLine($"Error: {ex.Message}");
                         }
+                        break;
+                    }
+
+                case "events":
+                    {
+                        int take = 20;
+                        if (parts.Length >= 2 && int.TryParse(parts[1], out var n) && n > 0)
+                            take = n;
+
+                        foreach (var ev in building.GetRecentEvents(take))
+                            Console.WriteLine(ev);
+                        break;
+                    }
+
+                case "oos":
+                    {
+                        if (parts.Length < 3)
+                        {
+                            Console.WriteLine("Usage: oos <elevatorId> <on|off>");
+                            break;
+                        }
+                        var id = parts[1];
+                        var onOff = parts[2].Equals("on", StringComparison.OrdinalIgnoreCase);
+
+                        var ok = building.SetOutOfService(id, onOff);
+                        if (!ok) Console.WriteLine($"No elevator with Id '{id}'");
+                        else Console.WriteLine($"Out-of-service {(onOff ? "enabled" : "disabled")} for {id}");
                         break;
                     }
 
