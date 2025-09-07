@@ -11,8 +11,16 @@ public sealed class Building : IElevatorObserver
     private readonly List<string> _events = new();
     private readonly HashSet<int> _floorsBoardedThisTick = new();
     private readonly HashSet<string> _outOfService = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(int Floor, Direction Dir), string> _reservations = new();
+    private readonly Dictionary<(int Floor, Direction Dir), Queue<int>> _waitingCreatedTicks = new();
 
     public int Floors { get; }
+    private int _tick;
+    private long _sumWaitTicks;
+    private int _servedPassengers;
+    private int _maxWaitTicks;
+    public int CurrentTick => _tick;
+
     public IReadOnlyList<IElevator> Elevators => _elevators.AsReadOnly();
     public IDispatchStrategy DispatchStrategy { get; }
     public bool IsOutOfService(string elevatorId) => _outOfService.Contains(elevatorId);
@@ -59,12 +67,18 @@ public sealed class Building : IElevatorObserver
             }
 
             var passenger = new Passenger(req.Floor, destinationFloor);
-            
+
             // Enqueue based on passenger's Direction
             if (passenger.Direction == Direction.Up)
+            {
                 fq.Up.Enqueue(passenger);
+                StampWaitCreated(req.Floor, Direction.Up);
+            }
             else if (passenger.Direction == Direction.Down)
+            {
                 fq.Down.Enqueue(passenger);
+                StampWaitCreated(req.Floor, Direction.Down);
+            }
         }
     }
 
@@ -95,6 +109,7 @@ public sealed class Building : IElevatorObserver
 
         // After all elevators tick, attempt to dispatch waiting floors
         TryDispatchQueues();
+        _tick++;
     }
 
     // Optional: used by console to print arrival/load events after each tick
@@ -157,9 +172,12 @@ public sealed class Building : IElevatorObserver
             boardedPrimary = elevator.BoardPassengers(primary);
             foreach (var passenger in primary.Take(boardedPrimary))
                 elevator.AddTarget(passenger.DestinationFloor);
+
+            // Metrics for the boarded primary direction
+            AccumulateWaits(floor, loadDir, boardedPrimary);
         }
 
-        // If nothing boarded in primary direction, try the opposite once
+        // If nothing boarded in primary direction, try opposite once
         int boardedOpp = 0;
         if (boardedPrimary == 0)
         {
@@ -177,12 +195,47 @@ public sealed class Building : IElevatorObserver
                 boardedOpp = elevator.BoardPassengers(opposite);
                 foreach (var passenger in opposite.Take(boardedOpp))
                     elevator.AddTarget(passenger.DestinationFloor);
+
+                // Metrics for the boarded opposite direction
+                AccumulateWaits(floor, opp, boardedOpp);
             }
         }
 
         int boarded = boardedPrimary + boardedOpp;
 
         _events.Add($"Stop F:{floor} | Unloaded:{unloaded} Boarded:{boarded} RemainingUp:{fq.Up.Count} RemainingDown:{fq.Down.Count}");
+    }
+
+    // Helper: accumulate wait times from created-tick queues
+    private void AccumulateWaits(int floor, Direction dir, int boardedCount)
+    {
+        if (boardedCount <= 0) return;
+
+        var key = (floor, dir);
+        if (!_waitingCreatedTicks.TryGetValue(key, out var createdQ)) return;
+
+        for (int i = 0; i < boardedCount && createdQ.Count > 0; i++)
+        {
+            int created = createdQ.Dequeue();
+            int wait = _tick - created;
+            _servedPassengers++;
+            _sumWaitTicks += wait;
+            if (wait > _maxWaitTicks) _maxWaitTicks = wait;
+        }
+
+        // Optional: cleanup empty buckets (not required)
+        if (createdQ.Count == 0) _waitingCreatedTicks.Remove(key);
+    }
+
+    private void StampWaitCreated(int floor, Direction dir)
+    {
+        var key = (floor, dir);
+        if (!_waitingCreatedTicks.TryGetValue(key, out var q))
+        {
+            q = new Queue<int>();
+            _waitingCreatedTicks[key] = q;
+        }
+        q.Enqueue(_tick);
     }
 
     public void OnDoorsClosed(IElevator elevator, int floor)
@@ -211,24 +264,33 @@ public sealed class Building : IElevatorObserver
 
     private void TryDispatchFloorDirection(int floor, Direction dir, int count)
     {
+        // If reserved for a live elevator, skip
+        if (_reservations.TryGetValue((floor, dir), out var reservedFor))
+        {
+            if (_elevators.Any(e => e.Id.Equals(reservedFor, StringComparison.OrdinalIgnoreCase) && !IsOutOfService(e.Id)))
+                return;
+
+            // Clean stale reservation
+            _reservations.Remove((floor, dir));
+        }
+
         var req = new Request(floor, dir, count);
         var chosen = DispatchStrategy.ChooseElevator(this, req);
         if (chosen == null) return;
 
-        // Avoid “all-or-nothing”: allow dispatch even if elevator can only take part of the queue.
-        // If the elevator is already at the floor, allow assignment even if capacity is 0
-        // (it may unload first on door open, freeing capacity).
+        // Allow partial assignment
         var capacity = chosen.AvailableCapacity;
         if (capacity <= 0 && chosen.CurrentFloor != floor) return;
 
         var assignCount = capacity > 0 ? Math.Min(count, capacity) : 1;
         var reqToAssign = (assignCount == count) ? req : new Request(floor, dir, assignCount);
 
-        // Keep your guard — if CanAccept checks direction/targets/etc.
         if (chosen.CanAccept(reqToAssign))
         {
             chosen.Assign(reqToAssign);
-            // Note: Do not dequeue here; boarding happens on OnDoorsOpened.
+            // Reserve this floor/direction for the chosen elevator until it's serviced
+            _reservations[(floor, dir)] = chosen.Id;
+            // Do not dequeue passengers here; boarding happens on door open.
         }
     }
 
@@ -259,5 +321,20 @@ public sealed class Building : IElevatorObserver
         int start = Math.Max(0, _events.Count - take);
         for (int i = start; i < _events.Count; i++)
             yield return _events[i];
+    }
+
+    public (int served, double avgWait, int maxWait) GetWaitMetrics()
+    {
+        var avg = _servedPassengers > 0 ? (double)_sumWaitTicks / _servedPassengers : 0.0;
+        return (_servedPassengers, avg, _maxWaitTicks);
+    }
+
+    public void ResetWaitMetrics()
+    {
+        _sumWaitTicks = 0;
+        _servedPassengers = 0;
+        _maxWaitTicks = 0;
+        _waitingCreatedTicks.Clear();
+        _reservations.Clear();
     }
 }

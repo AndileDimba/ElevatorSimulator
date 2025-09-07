@@ -90,7 +90,15 @@ public static class Program
                         Console.WriteLine("  auto on|off");
                         Console.WriteLine("  oos <elevatorId> <on|off>");
                         Console.WriteLine("  events [N]");
+                        Console.WriteLine("  metrics");
                         Console.WriteLine("  quit");
+                        break;
+                    }
+
+                case "metrics":
+                    {
+                        var (served, avg, max) = building.GetWaitMetrics();
+                        Console.WriteLine($"Served: {served} | Avg wait ticks: {avg:F2} | Max wait ticks: {max}");
                         break;
                     }
 
