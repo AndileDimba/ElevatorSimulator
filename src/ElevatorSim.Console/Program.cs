@@ -31,7 +31,7 @@ public static class Program
         building.AddElevator(new HighSpeedElevator("E2", startFloor: 5));
         building.AddElevator(new FreightElevator("F1"));
 
-        Console.WriteLine("TEAMX Elevator Challenge - Console (Day 5)");
+        Console.WriteLine("TEAMX Elevator Challenge - Console");
         Console.WriteLine("Commands: status | status waiting | call <floor> <up/down> <count> | press <elevatorId> <floor> | tick | auto on|off | quit");
 
         while (true)
