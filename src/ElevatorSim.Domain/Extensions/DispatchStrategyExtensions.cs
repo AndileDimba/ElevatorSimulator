@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ElevatorSim.Domain // Use your actual domain namespace
+namespace ElevatorSim.Domain
 {
     public static class DispatchStrategyExtensions
     {

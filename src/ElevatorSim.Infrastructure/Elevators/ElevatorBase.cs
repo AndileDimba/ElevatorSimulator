@@ -12,13 +12,11 @@ public abstract class ElevatorBase : IElevator
     protected readonly List<Passenger> _passengers = new();
     public IReadOnlyList<Passenger> Passengers => _passengers.AsReadOnly();
     public int AvailableCapacity => Math.Max(0, Capacity - _passengers.Count);
-
-    // Observer to inform building about arrivals/door events
     public IElevatorObserver? Observer { get; set; }
 
-    private int _moveTickBudget;   // counts down; when zero, move one floor
-    private int _doorTickBudget;   // counts down during opening/open/closing
-    protected int TopFloorExclusive { get; private set; } = 12; // default; override from derived
+    private int _moveTickBudget;
+    private int _doorTickBudget;
+    protected int TopFloorExclusive { get; private set; } = 12;
     public int SpeedTicksPerFloor { get; protected set; } = 5;
 
     protected ElevatorBase(string id, int startFloor, int capacity, int speedTicksPerFloor, int doorOpenTicks, int doorCloseTicks)
@@ -35,7 +33,7 @@ public abstract class ElevatorBase : IElevator
     }
 
     public string Id { get; }
-    public ElevatorType Type => ElevatorType.Passenger; // overridden by subclasses if needed
+    public ElevatorType Type => ElevatorType.Passenger;
     public int CurrentFloor { get; protected set; }
     public Direction Direction { get; protected set; }
     public bool IsMoving => State == ElevatorState.DoorsClosed && Direction != Direction.Idle && HasTargets;
@@ -48,7 +46,6 @@ public abstract class ElevatorBase : IElevator
 
     public virtual bool CanAccept(Request req)
     {
-        // Accept everything on Day 2. Day 3 will refine based on direction/capacity.
         return true;
     }
 
@@ -81,8 +78,8 @@ public abstract class ElevatorBase : IElevator
                 if (--_doorTickBudget <= 0)
                 {
                     State = ElevatorState.DoorsOpen;
-                    _doorTickBudget = Math.Max(1, _doorOpenTicks); // dwell time while doors are open
-                    OnDoorsOpen(); // Building will unload/load here
+                    _doorTickBudget = Math.Max(1, _doorOpenTicks);
+                    OnDoorsOpen();
                 }
                 break;
 
@@ -99,7 +96,6 @@ public abstract class ElevatorBase : IElevator
                 {
                     State = ElevatorState.DoorsClosed;
 
-                    // Day 3: notify close; then decide next direction
                     OnDoorsClosed();
 
                     Direction = ChooseNextDirection();
@@ -108,13 +104,6 @@ public abstract class ElevatorBase : IElevator
         }
     }
 
-    //protected virtual void OnArriveAndServeFloor()
-    //{
-    //    // Remove current floor from targets if present
-    //    _upTargets.Remove(CurrentFloor);
-    //    _downTargets.Remove(CurrentFloor);
-    //    // Passenger load/unload happens on Day 3
-    //}
 
     public int BoardPassengers(IEnumerable<Passenger> boarding)
     {
@@ -123,21 +112,17 @@ public abstract class ElevatorBase : IElevator
         {
             if (AvailableCapacity <= 0) break;
             _passengers.Add(p);
-            // Add internal destination as target
             AddTarget(p.DestinationFloor);
             boarded++;
         }
-        // After adding destinations, refine direction if idle
         if (Direction == Direction.Idle && HasTargets) ChooseInitialDirection();
         return boarded;
     }
 
     public int UnloadAtCurrentFloor()
     {
-        // Find passengers to unload (where DestinationFloor matches CurrentFloor)
         var toUnload = _passengers.Where(p => p.DestinationFloor == CurrentFloor).ToList();
 
-        // Remove them from the underlying list
         foreach (var passenger in toUnload)
         {
             _passengers.Remove(passenger);
@@ -201,14 +186,11 @@ public abstract class ElevatorBase : IElevator
 
     protected void BeginDoorOpen()
     {
-        // Prevent re-entry and budget resets if already opening/open.
         if (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen)
             return;
 
         State = ElevatorState.DoorsOpening;
         _doorTickBudget = Math.Max(1, _doorOpenTicks);
-
-        // Fire arrival once per stop
         Observer?.OnArrivedAtFloor(this, CurrentFloor);
     }
 
@@ -225,7 +207,6 @@ public abstract class ElevatorBase : IElevator
 
     private void EnsureStopToServeCurrentFloor()
     {
-        // Delegate to the canonical door-open transition.
         BeginDoorOpen();
     }
 
@@ -290,12 +271,11 @@ public abstract class ElevatorBase : IElevator
 
         if (floor == CurrentFloor &&
             (State == ElevatorState.DoorsOpening || State == ElevatorState.DoorsOpen))
-            return; // already handling this floor
+            return;
 
         AddTarget(floor);
     }
 
-    // Allow derived classes to set building floors bound in a controlled way
     protected void SetTopFloorExclusive(int floors)
     {
         TopFloorExclusive = Math.Max(1, floors);

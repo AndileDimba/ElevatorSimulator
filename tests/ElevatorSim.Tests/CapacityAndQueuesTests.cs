@@ -14,16 +14,10 @@ public class CapacityAndQueuesTests
         var building = new Building(12, new NearestAvailableDispatch());
         building.AddElevator(e1);
 
-        // Submit 6 passengers waiting at floor 0, going up
         var req = new Request(0, Direction.Up, 6);
         building.SubmitCall(req);
-
-        // Force the elevator to serve floor 0 now (bypass strategy variability)
         e1.Assign(req);
 
-        // Act: tick until doors open and loading occurs
-        // One tick to transition DoorsClosed -> DoorsOpening (if needed),
-        // another to DoorsOpen (doorOpenTicks = 1), then Building.OnDoorsOpened loads.
         for (int i = 0; i < 3; i++)
         {
             building.TickAll();
@@ -36,7 +30,7 @@ public class CapacityAndQueuesTests
     public void HighSpeedElevator_MovesFaster()
     {
         var elevator = new HighSpeedElevator("HS1");
-        Assert.Equal(3, elevator.SpeedTicksPerFloor); // Verify faster speed
+        Assert.Equal(3, elevator.SpeedTicksPerFloor);
     }
 
     [Fact]
