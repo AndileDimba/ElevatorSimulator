@@ -291,6 +291,22 @@ Auto-tick: ON (300ms)
 - tick 25 → advances 25 ticks and prints a summary.
 - events 10 → shows arrivals, stops, and OOS toggles.
 
+### Day 7 — Wait-time metrics
+
+#### What’s new
+- Wait-time metrics tracked from call to boarding.
+- `metrics` console command to display served count, average wait, and max wait (ticks).
+
+#### Commands
+- metrics
+
+#### Manual verification
+- `call 0 up 12`
+- `auto on` (let the first car board 10)
+- `auto off`
+- `metrics` → should show `Served: 10` and non-zero avg/max wait
+- Turn auto back on to board the remaining passengers; `metrics` will update (e.g., `Served: 12`)
+
 #### Build/Run requirements
 - Windows 11 (dev environment)
 - .NET 8 SDK
