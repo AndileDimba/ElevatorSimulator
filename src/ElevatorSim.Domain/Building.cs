@@ -38,11 +38,10 @@ public sealed class Building : IElevatorObserver
         }
     }
 
-    // In Building.cs (Domain)
     public bool AddElevator(IElevator elevator)
     {
         if (_elevators.Any(e => e.Id.Equals(elevator.Id, StringComparison.OrdinalIgnoreCase)))
-            return false; // prevent duplicates by Id
+            return false;
         _elevators.Add(elevator);
         return true;
     }
@@ -58,17 +57,15 @@ public sealed class Building : IElevatorObserver
             int destinationFloor;
             if (req.Floor == 0 && req.Direction == Direction.Up)
             {
-                destinationFloor = 3; // Fixed for exact log match (all unload at 3)
+                destinationFloor = 3;
             }
             else
             {
-                // Fallback random (hardcoded top=12 since not accessible here)
                 destinationFloor = (req.Direction == Direction.Up) ? rand.Next(req.Floor + 1, 12) : rand.Next(0, req.Floor);
             }
 
             var passenger = new Passenger(req.Floor, destinationFloor);
 
-            // Enqueue based on passenger's Direction
             if (passenger.Direction == Direction.Up)
             {
                 fq.Up.Enqueue(passenger);
@@ -82,7 +79,6 @@ public sealed class Building : IElevatorObserver
         }
     }
 
-    // Existing API: submit a floor call (direction + count)
     public void SubmitRequest(int floor, Direction dir, int count)
     {
         SubmitCall(new Request(floor, dir, count));
@@ -99,7 +95,6 @@ public sealed class Building : IElevatorObserver
 
             if (prevState != ElevatorState.DoorsOpen && e.State == ElevatorState.DoorsOpen)
             {
-                // Only one elevator boards per floor per tick
                 if (_floorsBoardedThisTick.Add(e.CurrentFloor))
                 {
                     OnDoorsOpened(e, e.CurrentFloor);
@@ -107,12 +102,10 @@ public sealed class Building : IElevatorObserver
             }
         }
 
-        // After all elevators tick, attempt to dispatch waiting floors
         TryDispatchQueues();
         _tick++;
     }
 
-    // Optional: used by console to print arrival/load events after each tick
     public IReadOnlyList<string> DrainEvents()
     {
         if (_events.Count == 0) return Array.Empty<string>();
@@ -128,7 +121,6 @@ public sealed class Building : IElevatorObserver
         return direction == Direction.Up ? fq.Up.Count : fq.Down.Count;
     }
 
-    // IElevatorObserver implementation
 
     public void OnArrivedAtFloor(IElevator elevator, int floor)
     {
@@ -146,7 +138,6 @@ public sealed class Building : IElevatorObserver
             return;
         }
 
-        // Decide initial load direction
         Direction loadDir = elevator.Direction;
         if (loadDir == Direction.Idle)
             loadDir = fq.Up.Count >= fq.Down.Count ? Direction.Up : Direction.Down;
@@ -157,7 +148,6 @@ public sealed class Building : IElevatorObserver
             loadDir = (loadDir == Direction.Up) ? Direction.Down : Direction.Up;
         }
 
-        // Primary attempt: board in loadDir up to capacity
         var primary = new List<Passenger>();
         while (primary.Count < elevator.AvailableCapacity)
         {
@@ -173,11 +163,9 @@ public sealed class Building : IElevatorObserver
             foreach (var passenger in primary.Take(boardedPrimary))
                 elevator.AddTarget(passenger.DestinationFloor);
 
-            // Metrics for the boarded primary direction
             AccumulateWaits(floor, loadDir, boardedPrimary);
         }
 
-        // If nothing boarded in primary direction, try opposite once
         int boardedOpp = 0;
         if (boardedPrimary == 0)
         {
@@ -196,7 +184,6 @@ public sealed class Building : IElevatorObserver
                 foreach (var passenger in opposite.Take(boardedOpp))
                     elevator.AddTarget(passenger.DestinationFloor);
 
-                // Metrics for the boarded opposite direction
                 AccumulateWaits(floor, opp, boardedOpp);
             }
         }
@@ -206,7 +193,6 @@ public sealed class Building : IElevatorObserver
         _events.Add($"Stop F:{floor} | Unloaded:{unloaded} Boarded:{boarded} RemainingUp:{fq.Up.Count} RemainingDown:{fq.Down.Count}");
     }
 
-    // Helper: accumulate wait times from created-tick queues
     private void AccumulateWaits(int floor, Direction dir, int boardedCount)
     {
         if (boardedCount <= 0) return;
@@ -223,7 +209,6 @@ public sealed class Building : IElevatorObserver
             if (wait > _maxWaitTicks) _maxWaitTicks = wait;
         }
 
-        // Optional: cleanup empty buckets (not required)
         if (createdQ.Count == 0) _waitingCreatedTicks.Remove(key);
     }
 
@@ -240,11 +225,8 @@ public sealed class Building : IElevatorObserver
 
     public void OnDoorsClosed(IElevator elevator, int floor)
     {
-        // After close, try re-dispatch in case there are still passengers waiting
         TryDispatchQueues();
     }
-
-    // Internal helpers
 
     private void TryDispatchQueues()
     {
@@ -253,7 +235,6 @@ public sealed class Building : IElevatorObserver
             int floor = kv.Key;
             var fq = kv.Value;
 
-            // Try dispatch both directions that have waiting passengers
             if (fq.Up.Count > 0)
                 TryDispatchFloorDirection(floor, Direction.Up, fq.Up.Count);
 
@@ -264,13 +245,11 @@ public sealed class Building : IElevatorObserver
 
     private void TryDispatchFloorDirection(int floor, Direction dir, int count)
     {
-        // If reserved for a live elevator, skip
         if (_reservations.TryGetValue((floor, dir), out var reservedFor))
         {
             if (_elevators.Any(e => e.Id.Equals(reservedFor, StringComparison.OrdinalIgnoreCase) && !IsOutOfService(e.Id)))
                 return;
 
-            // Clean stale reservation
             _reservations.Remove((floor, dir));
         }
 
@@ -278,7 +257,6 @@ public sealed class Building : IElevatorObserver
         var chosen = DispatchStrategy.ChooseElevator(this, req);
         if (chosen == null) return;
 
-        // Allow partial assignment
         var capacity = chosen.AvailableCapacity;
         if (capacity <= 0 && chosen.CurrentFloor != floor) return;
 
@@ -288,9 +266,7 @@ public sealed class Building : IElevatorObserver
         if (chosen.CanAccept(reqToAssign))
         {
             chosen.Assign(reqToAssign);
-            // Reserve this floor/direction for the chosen elevator until it's serviced
             _reservations[(floor, dir)] = chosen.Id;
-            // Do not dequeue passengers here; boarding happens on door open.
         }
     }
 

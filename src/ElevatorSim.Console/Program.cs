@@ -143,7 +143,6 @@ public static class Program
                     {
                         try
                         {
-                            // call <floor:int> <up|down> <count:int>
                             if (parts.Length < 4)
                             {
                                 Console.WriteLine("Usage: call <floor:int> <up|down> <count:int>");
@@ -233,7 +232,6 @@ public static class Program
             {
                 building.TickAll();
 
-                // Print Day 3 events
                 var events = building.DrainEvents();
                 foreach (var ev in events) Console.WriteLine(ev);
 

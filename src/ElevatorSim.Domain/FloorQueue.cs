@@ -5,7 +5,6 @@ namespace ElevatorSim.Domain;
 public sealed class FloorQueue
 {
     public int Floor { get; }
-    // Separate queues by direction
     public Queue<Passenger> Up { get; } = new();
     public Queue<Passenger> Down { get; } = new();
 

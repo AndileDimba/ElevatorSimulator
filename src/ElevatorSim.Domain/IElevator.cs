@@ -10,7 +10,7 @@ public interface IElevator
     int Capacity { get; }
     int PassengerCount { get; }
     IReadOnlyList<int> Targets { get; }
-    ElevatorState State { get; } // To expose State from ElevatorBase via IElevator
+    ElevatorState State { get; }
     IReadOnlyList<Passenger> Passengers { get; }
     int AvailableCapacity { get; }
     bool AddTarget(int floor);
@@ -20,11 +20,9 @@ public interface IElevator
     void Assign(Request req);
     void Tick();
 
-    // Day 3: operations needed by Building without referencing Infrastructure
     int UnloadAtCurrentFloor();
     int BoardPassengers(IEnumerable<Passenger> boarding);
 
-    // Day 3: observer hook
     IElevatorObserver? Observer { get; set; }
 }
 
